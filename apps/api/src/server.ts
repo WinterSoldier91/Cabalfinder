@@ -6,6 +6,7 @@ import { AppError } from "./lib/errors.js";
 import { registerActiveScanRoutes } from "./routes/activeScan.js";
 import { registerScoringRoutes } from "./routes/scoring.js";
 import { registerStatusRoutes } from "./routes/status.js";
+import { registerCronRoutes } from "./routes/cron.js";
 
 export async function buildServer() {
   const app = Fastify({
@@ -45,6 +46,7 @@ export async function buildServer() {
   await registerStatusRoutes(app);
   await registerScoringRoutes(app);
   await registerActiveScanRoutes(app);
+  await registerCronRoutes(app);
 
   return app;
 }

@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "crons": [
+    {
+      "path": "/v1/cron/monitor",
+      "schedule": "*/10 * * * *"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/v1/:match*",
+      "destination": "apps/api/src/vercel.ts"
+    }
+  ]
+}
