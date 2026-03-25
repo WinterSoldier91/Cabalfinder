@@ -175,10 +175,13 @@ async function main(): Promise<void> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mint: scanMint })
     });
-    if (liveScan.status !== 200 || !liveScan.body.ok || !Array.isArray(liveScan.body.rows)) {
+    if (liveScan.status === 429 || (liveScan.body.error && liveScan.body.error.includes("RPC HTTP 429"))) {
+      console.warn("SKIP /api/scan due to RPC rate limit (429)");
+    } else if (liveScan.status !== 200 || !liveScan.body.ok || !Array.isArray(liveScan.body.rows)) {
       throw new Error(`Live scan failed: ${JSON.stringify(liveScan.body)}`);
+    } else {
+      console.log(`PASS /api/scan live mint -> ${liveScan.body.rows.length} qualifying rows`);
     }
-    console.log(`PASS /api/scan live mint -> ${liveScan.body.rows.length} qualifying rows`);
 
     if (runMutations) {
       const snapshot = await fetchJson<{ ok: boolean; message?: string; error?: string }>(`${baseUrl}/api/run/snapshot`, {
