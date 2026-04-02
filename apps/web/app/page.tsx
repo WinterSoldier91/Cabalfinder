@@ -43,6 +43,7 @@ export default function HomePage() {
   const [isScanning, setIsScanning] = useState(false);
   const [copiedAll, setCopiedAll] = useState(false);
   const [copiedRelated, setCopiedRelated] = useState(false);
+  const [copiedRelatedCa, setCopiedRelatedCa] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,6 +76,14 @@ export default function HomePage() {
 
   const allProvidersOk = providerChecks.length > 0 && providerChecks.every((item) => item.ok);
 
+  const relatedSortedResults = useMemo(() => {
+    if (!scanResponse) {
+      return [] as ScanResult[];
+    }
+
+    return [...scanResponse.results].sort((a, b) => b.controlPct - a.controlPct);
+  }, [scanResponse]);
+
   const relatedStatsText = useMemo(() => {
     if (!scanResponse) {
       return "";
@@ -83,17 +92,17 @@ export default function HomePage() {
     const sourceName =
       scanResponse.sourceToken.name?.trim() ||
       scanResponse.sourceToken.symbol?.trim() ||
-      "Scanned token";
+      scanResponse.sourceToken.mint;
     const sourceSymbol = scanResponse.sourceToken.symbol?.trim();
     const sourceTitle = sourceSymbol ? `${sourceName} ($${sourceSymbol})` : sourceName;
 
-    const relatedLines = scanResponse.results.map((result) => {
+    const relatedLines = relatedSortedResults.map((result) => {
       const relatedName = result.name?.trim() || result.symbol?.trim() || result.mint;
       return `${(result.controlPct * 100).toFixed(2)}% related to ${relatedName}`;
     });
 
     return [sourceTitle, scanResponse.sourceToken.mint, "♥Related：", ...relatedLines].join("\n\n");
-  }, [scanResponse]);
+  }, [relatedSortedResults, scanResponse]);
 
   async function handleScanSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -105,6 +114,10 @@ export default function HomePage() {
 
     setIsScanning(true);
     setScanError(null);
+    setScanResponse(null);
+    setCopiedAll(false);
+    setCopiedRelated(false);
+    setCopiedRelatedCa(null);
 
     try {
       const response = await fetch(`${API_BASE}/v1/scans/active`, {
@@ -150,6 +163,20 @@ export default function HomePage() {
       await navigator.clipboard.writeText(relatedStatsText);
       setCopiedRelated(true);
       setTimeout(() => setCopiedRelated(false), 1500);
+    } catch {
+      // ignored
+    }
+  }
+
+  async function copyRelatedTokenAddress(address: string) {
+    if (!address) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopiedRelatedCa(address);
+      setTimeout(() => setCopiedRelatedCa((current) => (current === address ? null : current)), 1500);
     } catch {
       // ignored
     }
@@ -262,18 +289,30 @@ export default function HomePage() {
         <section className="glass-panel mb-6 p-4 md:p-5">
           <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Related stats</p>
           <p className="mt-2 text-sm text-zinc-300">
-            {(scanResponse.sourceToken.name || scanResponse.sourceToken.symbol || "Scanned token")}
+            {(scanResponse.sourceToken.name || scanResponse.sourceToken.symbol || scanResponse.sourceToken.mint)}
             {scanResponse.sourceToken.symbol ? ` ($${scanResponse.sourceToken.symbol})` : ""}
           </p>
           <p className="mt-1 font-mono text-xs text-zinc-500">{scanResponse.sourceToken.mint}</p>
 
           <ul className="mt-3 space-y-1.5 text-sm text-zinc-200">
-            {scanResponse.results.map((result) => (
-              <li key={`related-${result.mint}`}>
-                <span className="font-mono text-emerald-300">{(result.controlPct * 100).toFixed(2)}%</span>{" "}
-                related to <span className="text-zinc-100">{result.name || result.symbol || result.mint}</span>
-              </li>
-            ))}
+            {relatedSortedResults.map((result) => {
+              const tokenLabel = result.name || result.symbol || result.mint;
+              const address = result.ca || result.mint;
+              return (
+                <li key={`related-${result.mint}`} className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-emerald-300">{(result.controlPct * 100).toFixed(2)}%</span>
+                  <span>related to</span>
+                  <span className="text-zinc-100">{tokenLabel}</span>
+                  <button
+                    type="button"
+                    onClick={() => copyRelatedTokenAddress(address)}
+                    className="rounded-md border border-white/15 px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-zinc-400 transition hover:border-white/30 hover:text-zinc-200"
+                  >
+                    {copiedRelatedCa === address ? "Copied" : "Copy CA"}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </section>
       ) : null}
