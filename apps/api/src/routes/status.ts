@@ -21,8 +21,8 @@ export async function registerStatusRoutes(app: FastifyInstance): Promise<void> 
     },
     defaults: v2Defaults,
     providers: {
-      [providerNames.helius]: Boolean(env.HELIUS_API_KEY),
-      [providerNames.heliusWallet]: Boolean(env.HELIUS_API_KEY),
+      [providerNames.helius]: env.HELIUS_API_KEYS.length > 0,
+      [providerNames.heliusWallet]: env.HELIUS_API_KEYS.length > 0,
       [providerNames.postgres]: Boolean(env.DATABASE_URL),
       [providerNames.redis]: Boolean(env.REDIS_URL)
     },

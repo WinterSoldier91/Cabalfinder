@@ -140,7 +140,7 @@ function isLikelyStablecoinToken(token: {
 }
 
 export class ActiveScanService {
-  private readonly helius = new HeliusClient(env.HELIUS_API_KEY);
+  private readonly helius = new HeliusClient(env.HELIUS_API_KEYS);
 
   async run(params: RunActiveScanParams): Promise<{ scanRunId: string; response: ActiveScanResponse }> {
     const scanRunId = randomUUID();

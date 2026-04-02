@@ -122,6 +122,22 @@ function isRetryableStatus(status: number): boolean {
   return status === 429 || status === 502 || status === 503 || status === 504;
 }
 
+function shouldFallbackApiKey(error: AppError): boolean {
+  if ([401, 402, 403, 429].includes(error.statusCode)) {
+    return true;
+  }
+
+  const normalized = error.message.toLowerCase();
+  return (
+    normalized.includes("api key") ||
+    normalized.includes("unauthorized") ||
+    normalized.includes("forbidden") ||
+    normalized.includes("credit") ||
+    normalized.includes("quota") ||
+    normalized.includes("rate limit")
+  );
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -187,21 +203,48 @@ function toTokenOverview(asset: unknown, fallbackMint?: string): HeliusTokenOver
 }
 
 export class HeliusClient {
-  constructor(private readonly apiKey: string) {}
+  private readonly apiKeys: string[];
+  private activeApiKeyIndex = 0;
+
+  constructor(apiKeys: string | string[]) {
+    const normalized = Array.isArray(apiKeys) ? apiKeys : [apiKeys];
+    this.apiKeys = normalized
+      .map((key) => key.trim())
+      .filter((key, index, all) => Boolean(key) && all.indexOf(key) === index);
+  }
 
   private assertConfigured(): void {
-    if (!this.apiKey) {
-      throw new AppError(503, "HELIUS_API_KEY is required for the Helius-first active scan.");
+    if (this.apiKeys.length === 0) {
+      throw new AppError(503, "HELIUS_API_KEY (or HELIUS_FALLBACK_API_KEYS) is required for the Helius-first active scan.");
     }
   }
 
-  private async rpcCall<T>(method: string, params: Record<string, unknown>): Promise<T> {
-    this.assertConfigured();
+  private getApiKeysInPriorityOrder(): string[] {
+    if (this.apiKeys.length <= 1) {
+      return this.apiKeys;
+    }
 
+    const keys: string[] = [];
+    for (let offset = 0; offset < this.apiKeys.length; offset += 1) {
+      keys.push(this.apiKeys[(this.activeApiKeyIndex + offset) % this.apiKeys.length]);
+    }
+
+    return keys;
+  }
+
+  private markApiKeyAsActive(apiKey: string): void {
+    const index = this.apiKeys.indexOf(apiKey);
+    if (index >= 0) {
+      this.activeApiKeyIndex = index;
+    }
+  }
+
+  private async rpcCallWithApiKey<T>(apiKey: string, method: string, params: Record<string, unknown>): Promise<T> {
     let lastError: AppError | null = null;
+
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       const url = new URL(HELIUS_RPC_URL);
-      url.searchParams.set("api-key", this.apiKey);
+      url.searchParams.set("api-key", apiKey);
 
       const response = await fetch(url, {
         method: "POST",
@@ -239,13 +282,39 @@ export class HeliusClient {
     throw lastError ?? new AppError(503, `Helius ${method} failed.`);
   }
 
-  private async walletRequest<T>(
-    pathname: string,
-    searchParams: Record<string, string | number | boolean | undefined>
-  ): Promise<T> {
+  private async rpcCall<T>(method: string, params: Record<string, unknown>): Promise<T> {
     this.assertConfigured();
 
     let lastError: AppError | null = null;
+    for (const apiKey of this.getApiKeysInPriorityOrder()) {
+      try {
+        const result = await this.rpcCallWithApiKey<T>(apiKey, method, params);
+        this.markApiKeyAsActive(apiKey);
+        return result;
+      } catch (error) {
+        if (!(error instanceof AppError)) {
+          throw error;
+        }
+
+        lastError = error;
+        if (this.apiKeys.length > 1 && shouldFallbackApiKey(error)) {
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    throw lastError ?? new AppError(503, `Helius ${method} failed.`);
+  }
+
+  private async walletRequestWithApiKey<T>(
+    apiKey: string,
+    pathname: string,
+    searchParams: Record<string, string | number | boolean | undefined>
+  ): Promise<T> {
+    let lastError: AppError | null = null;
+
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       const url = new URL(pathname, HELIUS_WALLET_API_URL);
       for (const [key, value] of Object.entries(searchParams)) {
@@ -257,7 +326,7 @@ export class HeliusClient {
       const response = await fetch(url, {
         headers: {
           Accept: "application/json",
-          "X-Api-Key": this.apiKey
+          "X-Api-Key": apiKey
         }
       });
 
@@ -275,6 +344,35 @@ export class HeliusClient {
       }
 
       throw lastError;
+    }
+
+    throw lastError ?? new AppError(503, "Helius Wallet API request failed.");
+  }
+
+  private async walletRequest<T>(
+    pathname: string,
+    searchParams: Record<string, string | number | boolean | undefined>
+  ): Promise<T> {
+    this.assertConfigured();
+
+    let lastError: AppError | null = null;
+    for (const apiKey of this.getApiKeysInPriorityOrder()) {
+      try {
+        const result = await this.walletRequestWithApiKey<T>(apiKey, pathname, searchParams);
+        this.markApiKeyAsActive(apiKey);
+        return result;
+      } catch (error) {
+        if (!(error instanceof AppError)) {
+          throw error;
+        }
+
+        lastError = error;
+        if (this.apiKeys.length > 1 && shouldFallbackApiKey(error)) {
+          continue;
+        }
+
+        throw error;
+      }
     }
 
     throw lastError ?? new AppError(503, "Helius Wallet API request failed.");

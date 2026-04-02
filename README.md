@@ -123,7 +123,10 @@ Fill in `.env`:
 ```bash
 # --- Required ---
 DATABASE_URL="postgres://postgres.<project_ref>:<password>@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require&pgbouncer=true"
-HELIUS_API_KEY=your_helius_api_key
+HELIUS_API_KEY=your_primary_helius_api_key
+
+# --- Optional fallback keys (comma-separated) ---
+HELIUS_FALLBACK_API_KEYS=backup_key_one,backup_key_two
 
 # --- Optional but recommended ---
 REDIS_URL=redis://localhost:6379
@@ -241,7 +244,8 @@ curl -X POST http://localhost:4000/v1/scans/active \
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `DATABASE_URL` | ✅ | — | Supabase PostgreSQL connection string (PgBouncer transaction mode) |
-| `HELIUS_API_KEY` | ✅ | — | Helius API key for DAS + Wallet API |
+| `HELIUS_API_KEY` | ✅ | — | Primary Helius API key for DAS + Wallet API |
+| `HELIUS_FALLBACK_API_KEYS` | | — | Comma-separated backup Helius API keys used when primary key fails/quota-exhausts |
 | `REDIS_URL` | ✅ | `redis://localhost:6379` | Redis for BullMQ job queues |
 | `API_HOST` | | `0.0.0.0` | Fastify bind address |
 | `API_PORT` | | `4000` | Fastify port |

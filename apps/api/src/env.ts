@@ -12,6 +12,7 @@ const envSchema = z.object({
   USDC_MINT: z.string().default("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"),
   USDT_MINT: z.string().default("Es9vMFrzaCERmJfrF4H2Q8f4Jm4cM7kwh28ykVfoWHz"),
   HELIUS_API_KEY: z.string().default(""),
+  HELIUS_FALLBACK_API_KEYS: z.string().default(""),
   HELIUS_HOLDER_PAGE_LIMIT: z.coerce.number().int().positive().default(250),
   HELIUS_MAX_HOLDER_PAGES: z.coerce.number().int().positive().default(10),
   HELIUS_WALLET_PAGE_LIMIT: z.coerce.number().int().positive().default(100),
@@ -24,4 +25,14 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info")
 });
 
-export const env = envSchema.parse(process.env);
+const parsedEnv = envSchema.parse(process.env);
+
+const heliusApiKeys = [
+  parsedEnv.HELIUS_API_KEY,
+  ...parsedEnv.HELIUS_FALLBACK_API_KEYS.split(",").map((item) => item.trim())
+].filter((value, index, all) => Boolean(value) && all.indexOf(value) === index);
+
+export const env = {
+  ...parsedEnv,
+  HELIUS_API_KEYS: heliusApiKeys
+};

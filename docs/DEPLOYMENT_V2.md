@@ -19,6 +19,7 @@ Set these in your API host:
 - `DATABASE_URL=<supabase-connection-string>`
 - `REDIS_URL=<redis-connection-string>`
 - `HELIUS_API_KEY=<helius-api-key>`
+- `HELIUS_FALLBACK_API_KEYS=<backup_key_1,backup_key_2>` (optional, comma-separated)
 - `HELIUS_HOLDER_PAGE_LIMIT=250`
 - `HELIUS_MAX_HOLDER_PAGES=10`
 - `HELIUS_WALLET_PAGE_LIMIT=100`

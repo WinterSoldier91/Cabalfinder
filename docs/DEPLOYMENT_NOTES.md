@@ -16,7 +16,7 @@ Use these as equivalent production entrypoints:
 - Web: Next.js app (`apps/web`)
 - API: Fastify via Vercel serverless adapters (`api/healthz.ts`, `api/v1.ts`)
 - Database: Supabase Postgres (`DATABASE_URL`)
-- On-chain provider: Helius (`HELIUS_API_KEY`)
+- On-chain provider: Helius (`HELIUS_API_KEY`, optional fallback: `HELIUS_FALLBACK_API_KEYS`)
 
 ## Required Production Environment Variables
 
@@ -28,6 +28,7 @@ Minimum required for working scans + persistence:
 Recommended:
 
 - `REDIS_URL`
+- `HELIUS_FALLBACK_API_KEYS` (comma-separated backup keys for automatic failover)
 - `NEXT_PUBLIC_API_BASE_URL` (if needed for non-default routing)
 
 ## Post-Deploy Smoke Tests
@@ -59,6 +60,7 @@ Symptom:
 
 Fix:
 - Update `HELIUS_API_KEY` in Vercel production env
+- Optionally set `HELIUS_FALLBACK_API_KEYS` with one or more backup keys (comma-separated)
 - Redeploy production
 
 ### 2) `Persistence skipped: getaddrinfo ENOTFOUND <host>.supabase.co`
