@@ -86,6 +86,59 @@ function isLikelyInfrastructureWallet(address: string): boolean {
 
 const IGNORED_MINTS = new Set([env.USDC_MINT, env.USDT_MINT]);
 
+const STABLE_SYMBOL_HINTS = new Set([
+  "USDC",
+  "USDT",
+  "USDS",
+  "USDE",
+  "PYUSD",
+  "FDUSD",
+  "DAI",
+  "USDY",
+  "USDL",
+  "USDM",
+  "USDH",
+  "UXD",
+  "EURC"
+]);
+
+function normalizeSymbol(symbol?: string): string {
+  return (symbol ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function isLikelyStablecoinToken(token: {
+  mint: string;
+  symbol?: string;
+  name?: string;
+  priceUsd?: number | null;
+}): boolean {
+  if (IGNORED_MINTS.has(token.mint)) {
+    return true;
+  }
+
+  const symbol = normalizeSymbol(token.symbol);
+  if (symbol && STABLE_SYMBOL_HINTS.has(symbol)) {
+    return true;
+  }
+
+  const name = (token.name ?? "").toLowerCase();
+  const hasStableNameHint =
+    name.includes("stable") ||
+    name.includes("usd") ||
+    name.includes("tether") ||
+    name.includes("usd coin") ||
+    name.includes("dollar");
+
+  const priceUsd = token.priceUsd;
+  const nearPeg = priceUsd !== null && priceUsd !== undefined && priceUsd >= 0.97 && priceUsd <= 1.03;
+
+  if (hasStableNameHint && nearPeg) {
+    return true;
+  }
+
+  return false;
+}
+
 export class ActiveScanService {
   private readonly helius = new HeliusClient(env.HELIUS_API_KEY);
 
@@ -193,6 +246,17 @@ export class ActiveScanService {
         .map((entry) => {
           const overview = overviewMap.get(entry.mint);
           if (!overview) {
+            return null;
+          }
+
+          if (
+            isLikelyStablecoinToken({
+              mint: entry.mint,
+              symbol: overview.symbol ?? entry.symbol,
+              name: overview.name ?? entry.name,
+              priceUsd: overview.priceUsd ?? null
+            })
+          ) {
             return null;
           }
 

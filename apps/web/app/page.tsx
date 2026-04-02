@@ -42,6 +42,7 @@ export default function HomePage() {
   const [scanError, setScanError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [copiedAll, setCopiedAll] = useState(false);
+  const [copiedRelated, setCopiedRelated] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,6 +74,26 @@ export default function HomePage() {
   }, [statusResponse]);
 
   const allProvidersOk = providerChecks.length > 0 && providerChecks.every((item) => item.ok);
+
+  const relatedStatsText = useMemo(() => {
+    if (!scanResponse) {
+      return "";
+    }
+
+    const sourceName =
+      scanResponse.sourceToken.name?.trim() ||
+      scanResponse.sourceToken.symbol?.trim() ||
+      "Scanned token";
+    const sourceSymbol = scanResponse.sourceToken.symbol?.trim();
+    const sourceTitle = sourceSymbol ? `${sourceName} ($${sourceSymbol})` : sourceName;
+
+    const relatedLines = scanResponse.results.map((result) => {
+      const relatedName = result.name?.trim() || result.symbol?.trim() || result.mint;
+      return `${(result.controlPct * 100).toFixed(2)}% related to ${relatedName}`;
+    });
+
+    return [sourceTitle, scanResponse.sourceToken.mint, "♥Related：", ...relatedLines].join("\n\n");
+  }, [scanResponse]);
 
   async function handleScanSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -115,6 +136,20 @@ export default function HomePage() {
       await navigator.clipboard.writeText(scanResponse.summary.copyCAs);
       setCopiedAll(true);
       setTimeout(() => setCopiedAll(false), 1500);
+    } catch {
+      // ignored
+    }
+  }
+
+  async function copyRelatedStats() {
+    if (!relatedStatsText) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(relatedStatsText);
+      setCopiedRelated(true);
+      setTimeout(() => setCopiedRelated(false), 1500);
     } catch {
       // ignored
     }
@@ -193,13 +228,22 @@ export default function HomePage() {
               </p>
               <p className="mt-1 text-xs text-zinc-500">Run ID: {scanResponse.scanRunId}</p>
             </div>
-            <button
-              type="button"
-              onClick={copyAllAddresses}
-              className="h-10 rounded-lg border border-white/15 px-4 text-sm text-zinc-200 transition hover:border-white/30 hover:bg-white/10"
-            >
-              {copiedAll ? "Copied" : "Copy all CAs"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={copyAllAddresses}
+                className="h-10 rounded-lg border border-white/15 px-4 text-sm text-zinc-200 transition hover:border-white/30 hover:bg-white/10"
+              >
+                {copiedAll ? "Copied" : "Copy all CAs"}
+              </button>
+              <button
+                type="button"
+                onClick={copyRelatedStats}
+                className="h-10 rounded-lg border border-white/15 px-4 text-sm text-zinc-200 transition hover:border-white/30 hover:bg-white/10"
+              >
+                {copiedRelated ? "Copied" : "Copy related stats"}
+              </button>
+            </div>
           </div>
         </section>
       )}
@@ -211,6 +255,26 @@ export default function HomePage() {
               {warning}
             </p>
           ))}
+        </section>
+      ) : null}
+
+      {scanResponse && scanResponse.results.length > 0 ? (
+        <section className="glass-panel mb-6 p-4 md:p-5">
+          <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Related stats</p>
+          <p className="mt-2 text-sm text-zinc-300">
+            {(scanResponse.sourceToken.name || scanResponse.sourceToken.symbol || "Scanned token")}
+            {scanResponse.sourceToken.symbol ? ` ($${scanResponse.sourceToken.symbol})` : ""}
+          </p>
+          <p className="mt-1 font-mono text-xs text-zinc-500">{scanResponse.sourceToken.mint}</p>
+
+          <ul className="mt-3 space-y-1.5 text-sm text-zinc-200">
+            {scanResponse.results.map((result) => (
+              <li key={`related-${result.mint}`}>
+                <span className="font-mono text-emerald-300">{(result.controlPct * 100).toFixed(2)}%</span>{" "}
+                related to <span className="text-zinc-100">{result.name || result.symbol || result.mint}</span>
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
 
