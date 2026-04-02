@@ -25,12 +25,14 @@ export function TokenCard({
   result,
   scanRunId,
   rank,
-  scannedHolderCount
+  scannedHolderCount,
+  onRunAsBase
 }: {
   result: TokenResult;
   scanRunId: string;
   rank: number;
   scannedHolderCount: number;
+  onRunAsBase?: (mint: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -86,6 +88,15 @@ export function TokenCard({
           <p className="text-xs uppercase tracking-[0.15em] text-zinc-500">Rank #{rank}</p>
           <h3 className="mt-1 text-base font-semibold text-white">{result.symbol || "Unnamed token"}</h3>
           <p className="text-xs text-zinc-500">{result.name || result.mint}</p>
+          {onRunAsBase ? (
+            <button
+              type="button"
+              onClick={() => onRunAsBase(result.mint)}
+              className="mt-2 rounded-md border border-emerald-500/30 px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-emerald-300 transition hover:border-emerald-400 hover:text-emerald-200"
+            >
+              Run as base
+            </button>
+          ) : null}
         </div>
         <AddressCopier address={result.ca} />
       </header>

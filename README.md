@@ -189,7 +189,9 @@ Base: `http://localhost:4000`
 | `GET` | `/healthz` | Liveness check |
 | `GET` | `/v1/system/status` | Provider config + tuning params |
 | `POST` | `/v1/scans/active` | Run a new holder-intelligence scan |
+| `POST` | `/v1/scans/active/batch-common` | Multi-token common-thread wallet scan (3-5 mints) |
 | `GET` | `/v1/scans/active/:scanRunId` | Retrieve a persisted scan by ID |
+| `GET` | `/v1/scans/active/:scanRunId/holders` | Source top holders for a scan run |
 | `GET` | `/v1/scans/active/:scanRunId/overlap/:mint` | Overlap wallets for a result token |
 
 **Active scan request:**
@@ -198,6 +200,14 @@ Base: `http://localhost:4000`
 curl -X POST http://localhost:4000/v1/scans/active \
   -H 'content-type: application/json' \
   -d '{"mint":"So11111111111111111111111111111111111111112","topResults":10}'
+```
+
+**Batch common-thread request:**
+
+```bash
+curl -X POST http://localhost:4000/v1/scans/active/batch-common \
+  -H 'content-type: application/json' \
+  -d '{"mints":["mintA","mintB","mintC"],"topHolderLimit":50}'
 ```
 
 **Active scan response shape:**

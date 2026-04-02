@@ -1,8 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { z, ZodError } from "zod";
+import { z } from "zod";
 import { ActiveScanService } from "../services/activeScanService.js";
+import { BatchScanService } from "../services/batchScanService.js";
 import { assertValidSolanaMint } from "../lib/solana.js";
-import { getActiveScanById, getOverlapWallets } from "../repositories/activeScanRepository.js";
+import { getActiveScanById, getOverlapWallets, getSourceHolders } from "../repositories/activeScanRepository.js";
+import { AppError } from "../lib/errors.js";
 
 const activeScanRequestSchema = z.object({
   mint: z.string().min(1),
@@ -11,7 +13,13 @@ const activeScanRequestSchema = z.object({
   rpcApiKey: z.string().trim().min(1).optional()
 });
 
+const batchCommonScanSchema = z.object({
+  mints: z.array(z.string().min(1)).min(3).max(5),
+  topHolderLimit: z.number().int().min(10).max(100).default(50)
+});
+
 const activeScanService = new ActiveScanService();
+const batchScanService = new BatchScanService();
 
 export async function registerActiveScanRoutes(app: FastifyInstance): Promise<void> {
   app.post("/v1/scans/active", async (request) => {
@@ -32,6 +40,39 @@ export async function registerActiveScanRoutes(app: FastifyInstance): Promise<vo
       ok: true,
       scanRunId,
       ...response
+    };
+  });
+
+  app.post("/v1/scans/active/batch-common", async (request) => {
+    const payload = batchCommonScanSchema.parse(request.body);
+    const mints = payload.mints.map((mint) => assertValidSolanaMint(mint));
+    const uniqueMints = [...new Set(mints)];
+    if (uniqueMints.length < 3) {
+      throw new AppError(400, "Batch scan requires at least 3 unique mints.");
+    }
+
+    const response = await batchScanService.run({
+      mints: uniqueMints,
+      topHolderLimit: payload.topHolderLimit
+    });
+
+    return {
+      ok: true,
+      ...response
+    };
+  });
+
+  app.get("/v1/scans/active/:scanRunId/holders", async (request, reply) => {
+    const params = z.object({ scanRunId: z.string().uuid() }).parse(request.params);
+    const holders = await getSourceHolders(params.scanRunId);
+    if (holders.length === 0) {
+      reply.code(404);
+      return { ok: false, error: "Scan run not found or no source holders available." };
+    }
+
+    return {
+      ok: true,
+      holders
     };
   });
 

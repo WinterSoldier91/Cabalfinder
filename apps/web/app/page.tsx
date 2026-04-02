@@ -35,6 +35,44 @@ type ScanResponse = {
   warnings: string[];
 };
 
+type SourceHoldersResponse = {
+  ok: boolean;
+  error?: string;
+  holders: Array<{ address: string; rank: number; share: number }>;
+};
+
+type OverlapResponse = {
+  ok: boolean;
+  error?: string;
+  wallets: Array<{ address: string }>;
+};
+
+type BatchCommonResponse = {
+  ok: boolean;
+  error?: string;
+  scanRunId: string;
+  tokens: Array<{ mint: string; symbol?: string; name?: string; scannedHolders: number; deployerCandidateCount: number }>;
+  summary: {
+    requestedMintCount: number;
+    topHolderLimit: number;
+    commonWalletCount: number;
+    devLinkedWalletCount: number;
+  };
+  wallets: Array<{
+    address: string;
+    devLinkedTokenCount: number;
+    avgShare: number;
+    tokenMatches: Array<{
+      mint: string;
+      symbol?: string;
+      name?: string;
+      holderRank: number | null;
+      share: number | null;
+      directFromDeployer: boolean;
+    }>;
+  }>;
+};
+
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
 
 export default function HomePage() {
@@ -48,6 +86,17 @@ export default function HomePage() {
   const [copiedAll, setCopiedAll] = useState(false);
   const [copiedRelated, setCopiedRelated] = useState(false);
   const [copiedRelatedCa, setCopiedRelatedCa] = useState<string | null>(null);
+  const [batchMintsInput, setBatchMintsInput] = useState("");
+  const [isBatchScanning, setIsBatchScanning] = useState(false);
+  const [batchError, setBatchError] = useState<string | null>(null);
+  const [batchResponse, setBatchResponse] = useState<BatchCommonResponse | null>(null);
+  const [crossScanInsight, setCrossScanInsight] = useState<{
+    previousBaseMint: string;
+    newBaseMint: string;
+    previousOverlapCount: number;
+    persistedCount: number;
+    persistedPct: number;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -151,6 +200,35 @@ export default function HomePage() {
     return [sourceTitle, scanResponse.sourceToken.mint, "♥Related：", ...relatedLines].join("\n\n");
   }, [relatedSortedResults, scanResponse]);
 
+  async function runScanWithMint(trimmedMint: string): Promise<ScanResponse> {
+    const trimmedCustomKey = customHeliusApiKey.trim();
+    const requestPayload: {
+      mint: string;
+      topResults: number;
+      heliusApiKey?: string;
+    } = {
+      mint: trimmedMint,
+      topResults: 10
+    };
+
+    if (trimmedCustomKey) {
+      requestPayload.heliusApiKey = trimmedCustomKey;
+    }
+
+    const response = await fetch(`${API_BASE}/v1/scans/active`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestPayload)
+    });
+
+    const payload = (await response.json()) as ScanResponse;
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error ?? "Scan failed.");
+    }
+
+    return payload;
+  }
+
   async function handleScanSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -162,40 +240,66 @@ export default function HomePage() {
     setIsScanning(true);
     setScanError(null);
     setScanResponse(null);
+    setCrossScanInsight(null);
     setCopiedAll(false);
     setCopiedRelated(false);
     setCopiedRelatedCa(null);
 
     try {
-      const trimmedCustomKey = customHeliusApiKey.trim();
-      const requestPayload: {
-        mint: string;
-        topResults: number;
-        heliusApiKey?: string;
-      } = {
-        mint: trimmedMint,
-        topResults: 10
-      };
-
-      if (trimmedCustomKey) {
-        requestPayload.heliusApiKey = trimmedCustomKey;
-      }
-
-      const response = await fetch(`${API_BASE}/v1/scans/active`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestPayload)
-      });
-
-      const payload = (await response.json()) as ScanResponse;
-      if (!response.ok || !payload.ok) {
-        throw new Error(payload.error ?? "Scan failed.");
-      }
-
+      const payload = await runScanWithMint(trimmedMint);
       setScanResponse(payload);
     } catch (error) {
       setScanResponse(null);
       setScanError(error instanceof Error ? error.message : "Scan failed.");
+    } finally {
+      setIsScanning(false);
+    }
+  }
+
+  async function runBidirectionalCrossScan(targetMint: string) {
+    if (!scanResponse) {
+      return;
+    }
+
+    const previousBaseMint = scanResponse.sourceToken.mint;
+    const previousRunId = scanResponse.scanRunId;
+
+    setIsScanning(true);
+    setScanError(null);
+    setCrossScanInsight(null);
+
+    try {
+      const overlapRes = await fetch(`${API_BASE}/v1/scans/active/${previousRunId}/overlap/${targetMint}`);
+      const overlapPayload = (await overlapRes.json()) as OverlapResponse;
+      if (!overlapRes.ok || !overlapPayload.ok) {
+        throw new Error(overlapPayload.error ?? "Failed to load overlap wallets for cross-scan.");
+      }
+
+      const previousOverlapSet = new Set(overlapPayload.wallets.map((wallet) => wallet.address));
+
+      setMint(targetMint);
+      const newScan = await runScanWithMint(targetMint);
+      setScanResponse(newScan);
+
+      const holdersRes = await fetch(`${API_BASE}/v1/scans/active/${newScan.scanRunId}/holders`);
+      const holdersPayload = (await holdersRes.json()) as SourceHoldersResponse;
+      if (!holdersRes.ok || !holdersPayload.ok) {
+        throw new Error(holdersPayload.error ?? "Failed to load source holders for cross-scan.");
+      }
+
+      const newSourceSet = new Set(holdersPayload.holders.map((holder) => holder.address));
+      const persistedCount = [...previousOverlapSet].filter((address) => newSourceSet.has(address)).length;
+      const persistedPct = previousOverlapSet.size > 0 ? persistedCount / previousOverlapSet.size : 0;
+
+      setCrossScanInsight({
+        previousBaseMint,
+        newBaseMint: targetMint,
+        previousOverlapCount: previousOverlapSet.size,
+        persistedCount,
+        persistedPct
+      });
+    } catch (error) {
+      setScanError(error instanceof Error ? error.message : "Cross-scan failed.");
     } finally {
       setIsScanning(false);
     }
@@ -226,6 +330,41 @@ export default function HomePage() {
       setTimeout(() => setCopiedRelated(false), 1500);
     } catch {
       // ignored
+    }
+  }
+
+  async function runBatchCommonScan() {
+    const parsedMints = batchMintsInput
+      .split(/[\s,]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (parsedMints.length < 3) {
+      setBatchError("Add at least 3 mints for batch common-thread scan.");
+      return;
+    }
+
+    setIsBatchScanning(true);
+    setBatchError(null);
+    setBatchResponse(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/v1/scans/active/batch-common`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mints: parsedMints.slice(0, 5), topHolderLimit: 50 })
+      });
+
+      const payload = (await response.json()) as BatchCommonResponse;
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error ?? "Batch scan failed.");
+      }
+
+      setBatchResponse(payload);
+    } catch (error) {
+      setBatchError(error instanceof Error ? error.message : "Batch scan failed.");
+    } finally {
+      setIsBatchScanning(false);
     }
   }
 
@@ -341,6 +480,58 @@ export default function HomePage() {
         )}
       </section>
 
+      <section className="glass-panel mb-6 p-4 md:p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Batch multi-token scan</p>
+            <p className="mt-1 text-sm text-zinc-400">Paste 3–5 mints to find wallets common across all tokens.</p>
+          </div>
+          <button
+            type="button"
+            onClick={runBatchCommonScan}
+            disabled={isBatchScanning}
+            className="h-10 rounded-lg border border-emerald-500/40 px-4 text-sm text-emerald-200 transition hover:border-emerald-400 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isBatchScanning ? "Scanning…" : "Run batch scan"}
+          </button>
+        </div>
+        <textarea
+          value={batchMintsInput}
+          onChange={(event) => setBatchMintsInput(event.target.value)}
+          placeholder="mint_1\nmint_2\nmint_3"
+          className="mt-3 min-h-24 w-full rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 font-mono text-xs text-zinc-100 outline-none placeholder:text-zinc-500"
+        />
+        {batchError ? <p className="mt-2 text-sm text-red-300">{batchError}</p> : null}
+      </section>
+
+      {batchResponse ? (
+        <section className="glass-panel mb-6 p-4 md:p-5">
+          <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Common-thread wallets</p>
+          <p className="mt-1 text-sm text-zinc-300">
+            {batchResponse.summary.commonWalletCount} wallets shared across {batchResponse.summary.requestedMintCount} mints •{" "}
+            {batchResponse.summary.devLinkedWalletCount} wallet(s) show direct deployer transfer links.
+          </p>
+          <div className="mt-3 space-y-2">
+            {batchResponse.wallets.slice(0, 20).map((wallet) => (
+              <div key={wallet.address} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-mono text-xs text-zinc-200">{wallet.address}</p>
+                  <span className="text-xs text-zinc-400">dev links: {wallet.devLinkedTokenCount}</span>
+                </div>
+                <div className="mt-2 grid gap-1 text-xs text-zinc-400">
+                  {wallet.tokenMatches.map((match) => (
+                    <p key={`${wallet.address}-${match.mint}`}>
+                      {match.symbol || match.name || match.mint}: rank {match.holderRank ?? "-"} • share{" "}
+                      {match.share !== null ? `${(match.share * 100).toFixed(2)}%` : "-"} • {match.directFromDeployer ? "dev-linked" : "no dev link"}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {scanResponse && (
         <section className="glass-panel mb-6 p-4 md:p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -372,6 +563,17 @@ export default function HomePage() {
         </section>
       )}
 
+      {crossScanInsight ? (
+        <section className="mb-6 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+          <p className="font-medium">Bi-directional cross-scan result</p>
+          <p className="mt-1">
+            From <span className="font-mono">{crossScanInsight.previousBaseMint}</span> →{" "}
+            <span className="font-mono">{crossScanInsight.newBaseMint}</span>, {crossScanInsight.persistedCount} of{" "}
+            {crossScanInsight.previousOverlapCount} prior overlap wallets persisted ({(crossScanInsight.persistedPct * 100).toFixed(2)}%).
+          </p>
+        </section>
+      ) : null}
+
       {scanResponse?.warnings?.length ? (
         <section className="mb-6 space-y-2">
           {scanResponse.warnings.map((warning) => (
@@ -402,6 +604,13 @@ export default function HomePage() {
                   <span className="text-zinc-100">{tokenLabel}</span>
                   <button
                     type="button"
+                    onClick={() => runBidirectionalCrossScan(result.mint)}
+                    className="rounded-md border border-emerald-500/30 px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-emerald-300 transition hover:border-emerald-400 hover:text-emerald-200"
+                  >
+                    Run as base
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => copyRelatedTokenAddress(address)}
                     className="rounded-md border border-white/15 px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-zinc-400 transition hover:border-white/30 hover:text-zinc-200"
                   >
@@ -422,6 +631,7 @@ export default function HomePage() {
             rank={index + 1}
             scanRunId={scanResponse.scanRunId}
             scannedHolderCount={scanResponse.summary.scannedHolderCount}
+            onRunAsBase={runBidirectionalCrossScan}
           />
         ))}
       </section>

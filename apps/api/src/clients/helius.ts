@@ -45,6 +45,7 @@ export interface HeliusTokenOverview {
   circulatingSupply?: number | null;
   totalSupply?: number | null;
   athUsd?: number | null;
+  deployerCandidates?: string[];
 }
 
 export interface HeliusTokenHolder {
@@ -159,6 +160,33 @@ function isAccountIndexOverloadError(error: unknown): boolean {
   return isAccountIndexOverloadMessage(error.message);
 }
 
+function isLikelyAddress(value: unknown): value is string {
+  return typeof value === "string" && value.length >= 32 && value.length <= 60;
+}
+
+function extractAddressCandidates(input: unknown): string[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  const addresses: string[] = [];
+  for (const item of input) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+
+    const record = item as Record<string, unknown>;
+    const candidates = [record.address, record.owner, record.wallet, record.verified_address, record.creator];
+    for (const candidate of candidates) {
+      if (isLikelyAddress(candidate)) {
+        addresses.push(candidate);
+      }
+    }
+  }
+
+  return addresses;
+}
+
 function toTokenOverview(asset: unknown, fallbackMint?: string): HeliusTokenOverview {
   const tokenInfo = pickNested(asset, ["token_info"]);
   const metadata = pickNested(asset, ["content", "metadata"]);
@@ -186,6 +214,18 @@ function toTokenOverview(asset: unknown, fallbackMint?: string): HeliusTokenOver
     pickNumber(tokenInfo, ["ath", "all_time_high", "allTimeHigh", "athUsd"]) ??
     pickNumber(marketData, ["ath", "all_time_high", "allTimeHigh", "athUsd"]);
 
+  const authorityCandidates = extractAddressCandidates(pickNested(asset, ["authorities"]));
+  const creatorCandidates = [
+    ...extractAddressCandidates(pickNested(asset, ["creators"])),
+    ...extractAddressCandidates(pickNested(asset, ["content", "metadata", "creators"]))
+  ];
+  const ownershipOwner = pickString(pickNested(asset, ["ownership"]), ["owner"]);
+  const updateAuthority = pickString(pickNested(asset, ["authorities", "0"]), ["address"]);
+
+  const deployerCandidates = [...authorityCandidates, ...creatorCandidates, ownershipOwner, updateAuthority]
+    .filter((value, index, all): value is string => isLikelyAddress(value) && all.indexOf(value) === index)
+    .slice(0, 12);
+
   return {
     mint: pickString(asset, ["id"]) ?? fallbackMint ?? "",
     symbol: pickString(tokenInfo, ["symbol"]) ?? pickString(metadata, ["symbol"]),
@@ -198,8 +238,47 @@ function toTokenOverview(asset: unknown, fallbackMint?: string): HeliusTokenOver
     priceUsd,
     circulatingSupply,
     totalSupply,
-    athUsd
+    athUsd,
+    deployerCandidates
   };
+}
+
+function extractTokenTransfers(tx: unknown): Array<{ mint?: string; from?: string; to?: string }> {
+  if (!tx || typeof tx !== "object") {
+    return [];
+  }
+
+  const record = tx as Record<string, unknown>;
+  const transfers = record.tokenTransfers;
+  if (!Array.isArray(transfers)) {
+    return [];
+  }
+
+  const parsed: Array<{ mint?: string; from?: string; to?: string }> = [];
+  for (const item of transfers) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+
+    const row = item as Record<string, unknown>;
+    parsed.push({
+      mint: typeof row.mint === "string" ? row.mint : undefined,
+      from:
+        typeof row.fromUserAccount === "string"
+          ? row.fromUserAccount
+          : typeof row.fromTokenAccount === "string"
+            ? row.fromTokenAccount
+            : undefined,
+      to:
+        typeof row.toUserAccount === "string"
+          ? row.toUserAccount
+          : typeof row.toTokenAccount === "string"
+            ? row.toTokenAccount
+            : undefined
+    });
+  }
+
+  return parsed;
 }
 
 export class HeliusClient {
@@ -376,6 +455,81 @@ export class HeliusClient {
     }
 
     throw lastError ?? new AppError(503, "Helius Wallet API request failed.");
+  }
+
+  private async enhancedAddressTransactionsWithApiKey(apiKey: string, address: string, limit: number): Promise<unknown[]> {
+    const url = new URL(`/v0/addresses/${address}/transactions`, HELIUS_WALLET_API_URL);
+    url.searchParams.set("api-key", apiKey);
+    url.searchParams.set("limit", String(limit));
+
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "X-Api-Key": apiKey
+      }
+    });
+
+    if (!response.ok) {
+      throw new AppError(response.status >= 500 ? 503 : response.status, `Helius transactions API HTTP ${response.status}`);
+    }
+
+    const payload = (await response.json().catch(() => null)) as unknown;
+    if (!Array.isArray(payload)) {
+      return [];
+    }
+
+    return payload;
+  }
+
+  async getAddressTransactions(address: string, limit = 80): Promise<unknown[]> {
+    this.assertConfigured();
+
+    let lastError: AppError | null = null;
+    for (const apiKey of this.getApiKeysInPriorityOrder()) {
+      try {
+        const txs = await this.enhancedAddressTransactionsWithApiKey(apiKey, address, limit);
+        this.markApiKeyAsActive(apiKey);
+        return txs;
+      } catch (error) {
+        if (!(error instanceof AppError)) {
+          throw error;
+        }
+        lastError = error;
+        if (this.apiKeys.length > 1 && shouldFallbackApiKey(error)) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw lastError ?? new AppError(503, "Helius transactions API request failed.");
+  }
+
+  hasDirectTransferFromAnyDeployer(params: {
+    walletAddress: string;
+    tokenMint: string;
+    deployerCandidates: string[];
+    transactions: unknown[];
+  }): boolean {
+    const deployers = new Set(params.deployerCandidates);
+    if (deployers.size === 0) {
+      return false;
+    }
+
+    for (const tx of params.transactions) {
+      const transfers = extractTokenTransfers(tx);
+      for (const transfer of transfers) {
+        if (!transfer.mint || transfer.mint !== params.tokenMint) {
+          continue;
+        }
+
+        if (transfer.to === params.walletAddress && transfer.from && deployers.has(transfer.from)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   async getTokenOverview(address: string): Promise<HeliusTokenOverview> {

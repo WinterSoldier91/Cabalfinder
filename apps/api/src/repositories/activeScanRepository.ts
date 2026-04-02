@@ -299,6 +299,28 @@ export async function getActiveScanById(scanRunId: string) {
   };
 }
 
+export async function getSourceHolders(scanRunId: string) {
+  const [run] = await db.select().from(scanRuns).where(eq(scanRuns.id, scanRunId)).limit(1);
+  if (!run) return [];
+
+  const sourceTokenId = run.metadata.sourceTokenId as string;
+  if (!sourceTokenId) return [];
+
+  const rows = await db
+    .select({
+      address: wallets.address,
+      rank: holderSnapshots.holderRank,
+      amount: holderSnapshots.amount,
+      share: holderSnapshots.shareOfSupply
+    })
+    .from(holderSnapshots)
+    .innerJoin(wallets, eq(holderSnapshots.walletId, wallets.id))
+    .where(and(eq(holderSnapshots.tokenId, sourceTokenId), eq(holderSnapshots.snapshotTime, run.startedAt)))
+    .orderBy(holderSnapshots.holderRank);
+
+  return rows;
+}
+
 export async function getOverlapWallets(scanRunId: string, resultMint: string) {
   const [run] = await db.select().from(scanRuns).where(eq(scanRuns.id, scanRunId)).limit(1);
   if (!run) return [];
