@@ -6,7 +6,9 @@ import { getActiveScanById, getOverlapWallets } from "../repositories/activeScan
 
 const activeScanRequestSchema = z.object({
   mint: z.string().min(1),
-  topResults: z.number().int().min(1).max(25).default(10)
+  topResults: z.number().int().min(1).max(25).default(10),
+  heliusApiKey: z.string().trim().min(1).optional(),
+  rpcApiKey: z.string().trim().min(1).optional()
 });
 
 const activeScanService = new ActiveScanService();
@@ -16,9 +18,14 @@ export async function registerActiveScanRoutes(app: FastifyInstance): Promise<vo
     const payload = activeScanRequestSchema.parse(request.body);
     const mint = assertValidSolanaMint(payload.mint);
 
+    const requestHeliusKeys = [payload.heliusApiKey, payload.rpcApiKey]
+      .map((value) => value?.trim())
+      .filter((value, index, all): value is string => Boolean(value) && all.indexOf(value) === index);
+
     const { scanRunId, response } = await activeScanService.run({
       mint,
-      topResults: payload.topResults
+      topResults: payload.topResults,
+      heliusApiKeysOverride: requestHeliusKeys
     });
 
     return {

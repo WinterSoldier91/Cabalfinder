@@ -41,6 +41,8 @@ export default function HomePage() {
   const [statusResponse, setStatusResponse] = useState<StatusResponse | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [customHeliusApiKey, setCustomHeliusApiKey] = useState("");
+  const [rememberCustomHeliusApiKey, setRememberCustomHeliusApiKey] = useState(false);
   const [copiedAll, setCopiedAll] = useState(false);
   const [copiedRelated, setCopiedRelated] = useState(false);
   const [copiedRelatedCa, setCopiedRelatedCa] = useState<string | null>(null);
@@ -65,6 +67,36 @@ export default function HomePage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const savedKey = window.localStorage.getItem("cabalfinder.customHeliusApiKey");
+    if (savedKey) {
+      setCustomHeliusApiKey(savedKey);
+      setRememberCustomHeliusApiKey(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (!rememberCustomHeliusApiKey) {
+      window.localStorage.removeItem("cabalfinder.customHeliusApiKey");
+      return;
+    }
+
+    const trimmed = customHeliusApiKey.trim();
+    if (trimmed) {
+      window.localStorage.setItem("cabalfinder.customHeliusApiKey", trimmed);
+    } else {
+      window.localStorage.removeItem("cabalfinder.customHeliusApiKey");
+    }
+  }, [customHeliusApiKey, rememberCustomHeliusApiKey]);
 
   const providerChecks = useMemo(() => {
     if (!statusResponse?.providers) {
@@ -120,10 +152,24 @@ export default function HomePage() {
     setCopiedRelatedCa(null);
 
     try {
+      const trimmedCustomKey = customHeliusApiKey.trim();
+      const requestPayload: {
+        mint: string;
+        topResults: number;
+        heliusApiKey?: string;
+      } = {
+        mint: trimmedMint,
+        topResults: 10
+      };
+
+      if (trimmedCustomKey) {
+        requestPayload.heliusApiKey = trimmedCustomKey;
+      }
+
       const response = await fetch(`${API_BASE}/v1/scans/active`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mint: trimmedMint, topResults: 10 })
+        body: JSON.stringify(requestPayload)
       });
 
       const payload = (await response.json()) as ScanResponse;
@@ -235,6 +281,42 @@ export default function HomePage() {
                 "Run scan"
               )}
             </button>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+            <label htmlFor="custom-helius-key" className="block text-xs uppercase tracking-[0.12em] text-zinc-500">
+              Optional user Helius/RPC key
+            </label>
+            <p className="mt-1 text-xs text-zinc-500">Used only for your scan request; not persisted in backend storage.</p>
+            <input
+              id="custom-helius-key"
+              type="password"
+              className="mt-2 h-10 w-full rounded-lg border border-white/10 bg-zinc-950/70 px-3 text-sm text-white outline-none placeholder:text-zinc-500"
+              placeholder="Paste your own key for this browser/user"
+              value={customHeliusApiKey}
+              onChange={(event) => setCustomHeliusApiKey(event.target.value)}
+              autoComplete="off"
+            />
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <label className="inline-flex items-center gap-2 text-xs text-zinc-400">
+                <input
+                  type="checkbox"
+                  checked={rememberCustomHeliusApiKey}
+                  onChange={(event) => setRememberCustomHeliusApiKey(event.target.checked)}
+                />
+                Remember this key in this browser only
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomHeliusApiKey("");
+                  setRememberCustomHeliusApiKey(false);
+                }}
+                className="text-xs text-zinc-500 transition hover:text-zinc-300"
+              >
+                Clear key
+              </button>
+            </div>
           </div>
         </form>
         {scanError && (

@@ -9,6 +9,7 @@ import { markActiveScanFailed, persistActiveScan } from "../repositories/activeS
 interface RunActiveScanParams {
   mint: string;
   topResults: number;
+  heliusApiKeysOverride?: string[];
 }
 
 interface AggregatedHolding {
@@ -140,16 +141,33 @@ function isLikelyStablecoinToken(token: {
 }
 
 export class ActiveScanService {
-  private readonly helius = new HeliusClient(env.HELIUS_API_KEYS);
+  private readonly defaultHelius = new HeliusClient(env.HELIUS_API_KEYS);
+
+  private getHeliusClient(overrideKeys?: string[]): HeliusClient {
+    if (!overrideKeys || overrideKeys.length === 0) {
+      return this.defaultHelius;
+    }
+
+    const mergedKeys = [...overrideKeys, ...env.HELIUS_API_KEYS]
+      .map((key) => key.trim())
+      .filter((key, index, all) => Boolean(key) && all.indexOf(key) === index);
+
+    if (mergedKeys.length === env.HELIUS_API_KEYS.length) {
+      return this.defaultHelius;
+    }
+
+    return new HeliusClient(mergedKeys);
+  }
 
   async run(params: RunActiveScanParams): Promise<{ scanRunId: string; response: ActiveScanResponse }> {
     const scanRunId = randomUUID();
     const snapshotTime = new Date();
     const warnings: string[] = [];
+    const helius = this.getHeliusClient(params.heliusApiKeysOverride);
 
     try {
-      const sourceToken = await this.helius.getTokenOverview(params.mint);
-      const holderSnapshot = await this.helius.getTokenHolders({
+      const sourceToken = await helius.getTokenOverview(params.mint);
+      const holderSnapshot = await helius.getTokenHolders({
         mint: params.mint,
         topHolderLimit: env.TOP_HOLDER_LIMIT,
         pageLimit: env.HELIUS_HOLDER_PAGE_LIMIT,
@@ -180,7 +198,7 @@ export class ActiveScanService {
       const concurrencyLimit = Math.max(1, Math.min(env.WORKER_CONCURRENCY, 5));
       await mapWithConcurrency(holders, concurrencyLimit, async (holder) => {
         try {
-          const positions = await this.helius.getWalletFungiblePositions({
+          const positions = await helius.getWalletFungiblePositions({
             ownerAddress: holder.owner,
             pageLimit: env.HELIUS_WALLET_PAGE_LIMIT,
             maxPages: env.HELIUS_MAX_WALLET_PAGES
@@ -238,7 +256,7 @@ export class ActiveScanService {
 
       const candidateMints = [...aggregate.keys()];
       const overviewBatches = await mapWithConcurrency(chunkArray(candidateMints, 100), 2, async (mintBatch) =>
-        this.helius.getTokenOverviewBatch(mintBatch)
+        helius.getTokenOverviewBatch(mintBatch)
       );
       const overviewMap = new Map(overviewBatches.flat().map((token) => [token.mint, token] as const));
 
