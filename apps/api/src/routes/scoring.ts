@@ -1,14 +1,11 @@
 import type { FastifyInstance } from "fastify";
-import { calculateActiveScanScore, v2Defaults } from "@cabalfinder/shared";
+import { calculateActiveScanScore } from "@cabalfinder/shared";
 import { z } from "zod";
 
 const scorePreviewSchema = z.object({
-  controlPct: z.number().nonnegative(),
-  totalUsdHeld: z.number().nonnegative(),
-  overlapCount: z.number().int().nonnegative(),
-  maxControlPct: z.number().positive().default(1),
-  maxTotalUsdHeld: z.number().positive(),
-  maxOverlapCount: z.number().positive().default(v2Defaults.topHolderLimit)
+  holderOverlapPct: z.number().nonnegative().max(1),
+  controlPct: z.number().nonnegative().max(1),
+  valueSharePct: z.number().nonnegative().max(1)
 });
 
 export async function registerScoringRoutes(app: FastifyInstance): Promise<void> {

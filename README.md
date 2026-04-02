@@ -210,9 +210,19 @@ curl -X POST http://localhost:4000/v1/scans/active \
   "results": [
     {
       "mint": "...", "ca": "...", "symbol": "BONK",
-      "marketCapUsd": 1200000, "overlapHolderCount": 12,
-      "totalUsdHeld": 45000, "controlPct": 0.031, "score": 0.741,
-      "scoreBreakdown": { "normalizedControlPct": 0.8, "normalizedTotalUsdHeld": 0.6, "normalizedOverlapCount": 0.5, "finalScore": 0.741 }
+      "marketCapUsd": 1200000,
+      "overlapHolderCount": 12,
+      "holderOverlapPct": 0.24,
+      "totalUsdHeld": 45000,
+      "valueSharePct": 0.18,
+      "controlPct": 0.031,
+      "score": 0.179,
+      "scoreBreakdown": {
+        "holderOverlapPct": 0.24,
+        "controlPct": 0.031,
+        "valueSharePct": 0.18,
+        "finalScore": 0.179
+      }
     }
   ],
   "summary": { "scannedHolderCount": 50, "returnedResultCount": 10, "copyCAs": "mint1,mint2,..." },

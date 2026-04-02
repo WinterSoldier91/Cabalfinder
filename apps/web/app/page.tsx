@@ -17,6 +17,8 @@ type ScanResult = {
   name?: string;
   marketCapUsd: number;
   totalUsdHeld: number;
+  holderOverlapPct?: number;
+  valueSharePct?: number;
   controlPct: number;
   overlapHolderCount: number;
   score: number;
@@ -108,12 +110,25 @@ export default function HomePage() {
 
   const allProvidersOk = providerChecks.length > 0 && providerChecks.every((item) => item.ok);
 
+  const getRelatedPct = (result: ScanResult): number => {
+    if (typeof result.holderOverlapPct === "number") {
+      return Math.max(0, result.holderOverlapPct);
+    }
+
+    const scannedHolderCount = scanResponse?.summary.scannedHolderCount ?? 0;
+    if (scannedHolderCount > 0) {
+      return Math.max(0, result.overlapHolderCount / scannedHolderCount);
+    }
+
+    return Math.max(0, result.controlPct);
+  };
+
   const relatedSortedResults = useMemo(() => {
     if (!scanResponse) {
       return [] as ScanResult[];
     }
 
-    return [...scanResponse.results].sort((a, b) => b.controlPct - a.controlPct);
+    return [...scanResponse.results].sort((a, b) => getRelatedPct(b) - getRelatedPct(a));
   }, [scanResponse]);
 
   const relatedStatsText = useMemo(() => {
@@ -130,7 +145,7 @@ export default function HomePage() {
 
     const relatedLines = relatedSortedResults.map((result) => {
       const relatedName = result.name?.trim() || result.symbol?.trim() || result.mint;
-      return `${(result.controlPct * 100).toFixed(2)}% related to ${relatedName}`;
+      return `${(getRelatedPct(result) * 100).toFixed(2)}% related to ${relatedName}`;
     });
 
     return [sourceTitle, scanResponse.sourceToken.mint, "♥Related：", ...relatedLines].join("\n\n");
@@ -382,7 +397,7 @@ export default function HomePage() {
               const address = result.ca || result.mint;
               return (
                 <li key={`related-${result.mint}`} className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-emerald-300">{(result.controlPct * 100).toFixed(2)}%</span>
+                  <span className="font-mono text-emerald-300">{(getRelatedPct(result) * 100).toFixed(2)}%</span>
                   <span>related to</span>
                   <span className="text-zinc-100">{tokenLabel}</span>
                   <button
@@ -401,7 +416,13 @@ export default function HomePage() {
 
       <section className="results-grid grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {scanResponse?.results.map((result, index) => (
-          <TokenCard key={result.mint} result={result} rank={index + 1} scanRunId={scanResponse.scanRunId} />
+          <TokenCard
+            key={result.mint}
+            result={result}
+            rank={index + 1}
+            scanRunId={scanResponse.scanRunId}
+            scannedHolderCount={scanResponse.summary.scannedHolderCount}
+          />
         ))}
       </section>
 

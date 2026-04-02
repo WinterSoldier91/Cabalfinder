@@ -13,13 +13,25 @@ interface TokenResult {
   name?: string;
   marketCapUsd: number;
   totalUsdHeld: number;
+  holderOverlapPct?: number;
+  valueSharePct?: number;
   controlPct: number;
   overlapHolderCount: number;
   score: number;
   athUsd?: number | null;
 }
 
-export function TokenCard({ result, scanRunId, rank }: { result: TokenResult; scanRunId: string; rank: number }) {
+export function TokenCard({
+  result,
+  scanRunId,
+  rank,
+  scannedHolderCount
+}: {
+  result: TokenResult;
+  scanRunId: string;
+  rank: number;
+  scannedHolderCount: number;
+}) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [wallets, setWallets] = useState<Array<{ address: string; usdValue: number }> | null>(null);
@@ -54,6 +66,18 @@ export function TokenCard({ result, scanRunId, rank }: { result: TokenResult; sc
     }).format(value);
 
   const controlPct = Math.max(0, Math.min(100, result.controlPct * 100));
+  const holderOverlapPct = Math.max(
+    0,
+    Math.min(
+      100,
+      (typeof result.holderOverlapPct === "number"
+        ? result.holderOverlapPct
+        : scannedHolderCount > 0
+          ? result.overlapHolderCount / scannedHolderCount
+          : 0) * 100
+    )
+  );
+  const valueSharePct = Math.max(0, Math.min(100, (result.valueSharePct ?? 0) * 100));
 
   return (
     <article className="result-card glass-panel flex flex-col gap-4 p-4">
@@ -76,13 +100,18 @@ export function TokenCard({ result, scanRunId, rank }: { result: TokenResult; sc
           <p className="mt-1 font-mono text-emerald-300">{formatUsd(result.totalUsdHeld)}</p>
         </div>
         <div>
-          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Control</p>
+          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Supply control</p>
           <p className="mt-1 font-mono text-zinc-200">{controlPct.toFixed(1)}%</p>
         </div>
         <div>
           <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Score</p>
           <p className="mt-1 font-mono text-zinc-200">{result.score.toFixed(3)}</p>
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-400">
+        <span>Community overlap: <span className="font-mono text-zinc-200">{holderOverlapPct.toFixed(2)}%</span></span>
+        <span>Value share: <span className="font-mono text-zinc-200">{valueSharePct.toFixed(2)}%</span></span>
       </div>
 
       <div>

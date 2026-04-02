@@ -35,7 +35,9 @@ interface CandidateTokenResult {
   marketCapUsd: number;
   athUsd: number | null;
   overlapHolderCount: number;
+  holderOverlapPct: number;
   totalUsdHeld: number;
+  valueSharePct: number;
   controlPct: number;
   scoreBreakdown: ReturnType<typeof calculateActiveScanScore>;
   score: number;
@@ -325,23 +327,23 @@ export class ActiveScanService {
         }
       }
 
-      const maxControlPct = Math.max(...eligible.map((item) => item.controlPct), 1);
-      const maxTotalUsdHeld = Math.max(...eligible.map((item) => item.totalUsdHeld), 1);
-      const maxOverlapCount = Math.max(...eligible.map((item) => item.overlapHolderCount), 1);
+      const totalEligibleUsdHeld = eligible.reduce((sum, item) => sum + item.totalUsdHeld, 0);
 
       const ranked: CandidateTokenResult[] = eligible
         .map((item) => {
+          const holderOverlapPct = holders.length > 0 ? item.overlapHolderCount / holders.length : 0;
+          const valueSharePct = totalEligibleUsdHeld > 0 ? item.totalUsdHeld / totalEligibleUsdHeld : 0;
+
           const scoreBreakdown = calculateActiveScanScore({
+            holderOverlapPct,
             controlPct: item.controlPct,
-            totalUsdHeld: item.totalUsdHeld,
-            overlapCount: item.overlapHolderCount,
-            maxControlPct,
-            maxTotalUsdHeld,
-            maxOverlapCount
+            valueSharePct
           });
 
           return {
             ...item,
+            holderOverlapPct,
+            valueSharePct,
             scoreBreakdown,
             score: scoreBreakdown.finalScore
           };
@@ -388,7 +390,9 @@ export class ActiveScanService {
           marketCapUsd: item.marketCapUsd,
           athUsd: item.athUsd,
           overlapHolderCount: item.overlapHolderCount,
+          holderOverlapPct: item.holderOverlapPct,
           totalUsdHeld: item.totalUsdHeld,
+          valueSharePct: item.valueSharePct,
           controlPct: item.controlPct,
           score: item.score,
           scoreBreakdown: item.scoreBreakdown

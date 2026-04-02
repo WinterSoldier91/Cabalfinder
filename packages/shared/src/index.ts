@@ -44,25 +44,22 @@ export const v2Defaults = {
   controlAlertThresholdPct: 0.2,
   topHolderLimit: 50,
   activeScanWeights: {
-    controlPct: 0.4,
-    usdHeld: 0.35,
-    overlapCount: 0.25
+    holderOverlapPct: 0.5,
+    controlPct: 0.3,
+    valueSharePct: 0.2
   }
 } as const;
 
 export interface ActiveScanScoreInput {
+  holderOverlapPct: number;
   controlPct: number;
-  totalUsdHeld: number;
-  overlapCount: number;
-  maxControlPct: number;
-  maxTotalUsdHeld: number;
-  maxOverlapCount: number;
+  valueSharePct: number;
 }
 
 export interface ActiveScanScoreBreakdown {
-  normalizedControlPct: number;
-  normalizedTotalUsdHeld: number;
-  normalizedOverlapCount: number;
+  holderOverlapPct: number;
+  controlPct: number;
+  valueSharePct: number;
   finalScore: number;
 }
 
@@ -73,7 +70,9 @@ export interface RankedCoHeldToken {
   marketCapUsd: number;
   athUsd?: number | null;
   overlapHolderCount: number;
+  holderOverlapPct: number;
   totalUsdHeld: number;
+  valueSharePct: number;
   controlPct: number;
   score: number;
 }
@@ -86,7 +85,9 @@ export interface ActiveScanResult {
   marketCapUsd: number;
   athUsd?: number | null;
   overlapHolderCount: number;
+  holderOverlapPct: number;
   totalUsdHeld: number;
+  valueSharePct: number;
   controlPct: number;
   score: number;
   scoreBreakdown: ActiveScanScoreBreakdown;
@@ -122,27 +123,20 @@ function clamp01(value: number): number {
   return value;
 }
 
-function normalize(value: number, max: number): number {
-  if (!Number.isFinite(value) || !Number.isFinite(max) || max <= 0) {
-    return 0;
-  }
-  return clamp01(value / max);
-}
-
 export function calculateActiveScanScore(input: ActiveScanScoreInput): ActiveScanScoreBreakdown {
-  const normalizedControlPct = normalize(input.controlPct, input.maxControlPct);
-  const normalizedTotalUsdHeld = normalize(input.totalUsdHeld, input.maxTotalUsdHeld);
-  const normalizedOverlapCount = normalize(input.overlapCount, input.maxOverlapCount);
+  const holderOverlapPct = clamp01(input.holderOverlapPct);
+  const controlPct = clamp01(input.controlPct);
+  const valueSharePct = clamp01(input.valueSharePct);
 
   const finalScore =
-    normalizedControlPct * v2Defaults.activeScanWeights.controlPct +
-    normalizedTotalUsdHeld * v2Defaults.activeScanWeights.usdHeld +
-    normalizedOverlapCount * v2Defaults.activeScanWeights.overlapCount;
+    holderOverlapPct * v2Defaults.activeScanWeights.holderOverlapPct +
+    controlPct * v2Defaults.activeScanWeights.controlPct +
+    valueSharePct * v2Defaults.activeScanWeights.valueSharePct;
 
   return {
-    normalizedControlPct,
-    normalizedTotalUsdHeld,
-    normalizedOverlapCount,
+    holderOverlapPct,
+    controlPct,
+    valueSharePct,
     finalScore: Number(finalScore.toFixed(6))
   };
 }

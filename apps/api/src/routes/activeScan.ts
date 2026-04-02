@@ -43,6 +43,9 @@ export async function registerActiveScanRoutes(app: FastifyInstance): Promise<vo
       return { ok: false, error: "Scan run not found." };
     }
 
+    const scannedHolderCount = (data.run.metadata.scannedHolderCount as number) ?? 0;
+    const totalUsdHeldAcrossResults = data.results.reduce((sum, row) => sum + row.totalUsdHeld, 0);
+
     return {
       ok: true,
       scanRunId: params.scanRunId,
@@ -60,14 +63,16 @@ export async function registerActiveScanRoutes(app: FastifyInstance): Promise<vo
         symbol: row.symbol,
         name: row.name,
         overlapHolderCount: row.overlapHolderCount,
+        holderOverlapPct: scannedHolderCount > 0 ? row.overlapHolderCount / scannedHolderCount : 0,
         totalUsdHeld: row.totalUsdHeld,
+        valueSharePct: totalUsdHeldAcrossResults > 0 ? row.totalUsdHeld / totalUsdHeldAcrossResults : 0,
         controlPct: row.supplyControlPct,
         marketCapUsd: row.marketCapUsd,
         athUsd: row.athUsd,
         score: row.weightedScore
       })),
       summary: {
-        scannedHolderCount: data.run.metadata.scannedHolderCount as number ?? 0,
+        scannedHolderCount,
         returnedResultCount: data.results.length,
         eligibleResultCount: data.run.metadata.eligibleResultCount as number ?? data.results.length,
         topHolderLimit: data.run.metadata.topHolderLimit as number ?? 50,
