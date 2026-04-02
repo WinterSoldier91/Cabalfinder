@@ -3,7 +3,9 @@
 import { type FormEvent, useEffect, useState, useTransition } from "react";
 import { launchProtocols, liquidityProtocols, providerNames, queueNames, v2Defaults } from "@cabalfinder/shared";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+// On Vercel: NEXT_PUBLIC_API_BASE_URL is empty → relative URLs → same domain as the serverless functions.
+// For local dev: set NEXT_PUBLIC_API_BASE_URL=http://localhost:4000 in apps/web/.env.local
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
 
 const capabilities = [
   {
