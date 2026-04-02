@@ -31,6 +31,7 @@
     "test:live:mutations": "tsx scripts/liveSmoke.ts --mutations",
     "test:load": "k6 run tests/load/dashboard.k6.js",
     "test:security": "bash scripts/zap-baseline.sh",
+    "test:e2e": "playwright test",
     "start": "tsx src/index.ts",
     "run:once": "tsx src/index.ts run-once",
     "scan": "tsx src/index.ts scan",

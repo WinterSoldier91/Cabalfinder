@@ -163,7 +163,8 @@ function toTokenOverview(asset: unknown, fallbackMint?: string): HeliusTokenOver
     pickNumber(priceInfo, ["price_per_token", "pricePerToken", "price", "usd_price"]) ??
     pickNumber(tokenInfo, ["price_per_token", "pricePerToken", "price"]);
   const marketCapUsd =
-    priceUsd !== null && circulatingSupply !== null ? Number((priceUsd * circulatingSupply).toFixed(6)) : null;
+    pickNumber(asset, ["market_cap", "marketCap", "market_cap_usd"]) ??
+    (priceUsd !== null && circulatingSupply !== null ? Number((priceUsd * circulatingSupply).toFixed(6)) : null);
   const athUsd =
     pickNumber(priceInfo, ["ath", "all_time_high", "allTimeHigh", "athUsd"]) ??
     pickNumber(tokenInfo, ["ath", "all_time_high", "allTimeHigh", "athUsd"]) ??

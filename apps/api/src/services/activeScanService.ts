@@ -73,14 +73,18 @@ function chunkArray<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
+const INFRA_WALLETS = new Set([
+  "11111111111111111111111111111111",
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "Vote111111111111111111111111111111111111111",
+  "Sysvar1111111111111111111111111111111111111"
+]);
+
 function isLikelyInfrastructureWallet(address: string): boolean {
-  return [
-    "11111111111111111111111111111111",
-    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-    "Vote111111111111111111111111111111111111111",
-    "Sysvar1111111111111111111111111111111111111"
-  ].includes(address);
+  return INFRA_WALLETS.has(address);
 }
+
+const IGNORED_MINTS = new Set([env.USDC_MINT, env.USDT_MINT]);
 
 export class ActiveScanService {
   private readonly helius = new HeliusClient(env.HELIUS_API_KEY);
@@ -119,7 +123,9 @@ export class ActiveScanService {
       const aggregate = new Map<string, AggregatedHolding>();
       const skippedHolders: Array<{ owner: string; reason: string }> = [];
 
-      await mapWithConcurrency(holders, 1, async (holder) => {
+      // Improved concurrency for wallet expansion
+      const concurrencyLimit = Math.max(1, Math.min(env.WORKER_CONCURRENCY, 5));
+      await mapWithConcurrency(holders, concurrencyLimit, async (holder) => {
         try {
           const positions = await this.helius.getWalletFungiblePositions({
             ownerAddress: holder.owner,
@@ -128,7 +134,7 @@ export class ActiveScanService {
           });
 
           for (const position of positions) {
-            if (position.mint === params.mint || position.amountUi <= 0) {
+            if (position.mint === params.mint || position.amountUi <= 0 || IGNORED_MINTS.has(position.mint)) {
               continue;
             }
 
