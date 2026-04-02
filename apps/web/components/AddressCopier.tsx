@@ -30,10 +30,11 @@ export function AddressCopier({ address, className, showFullOnHover = false }: A
       type="button"
       onClick={handleCopy}
       className={cn(
-        "group flex items-center gap-2 rounded-md bg-white/5 border border-white/10 px-2.5 py-1.5 text-xs font-mono text-zinc-300 transition-all hover:bg-white/10 hover:border-white/20 hover:text-white",
+        "group flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-mono text-zinc-300 transition-all hover:border-white/20 hover:bg-white/10 hover:text-white",
         className
       )}
-      title="Copy Address"
+      title="Copy address"
+      aria-label="Copy address"
     >
       <span className="truncate">
         {showFullOnHover ? (

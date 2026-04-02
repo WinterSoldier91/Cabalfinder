@@ -1,12 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, AlertCircle, Coins, Users, Wallet } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { AddressCopier } from "./AddressCopier";
-import { cn } from "../lib/utils";
 
-// Make sure API_BASE matches what page.tsx uses (empty on Vercel for relative)
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
 
 interface TokenResult {
@@ -25,7 +22,7 @@ interface TokenResult {
 export function TokenCard({ result, scanRunId, rank }: { result: TokenResult; scanRunId: string; rank: number }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [wallets, setWallets] = useState<any[] | null>(null);
+  const [wallets, setWallets] = useState<Array<{ address: string; usdValue: number }> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function toggleOverlap() {
@@ -35,7 +32,9 @@ export function TokenCard({ result, scanRunId, rank }: { result: TokenResult; sc
       try {
         const res = await fetch(`${API_BASE}/v1/scans/active/${scanRunId}/overlap/${result.mint}`);
         const payload = await res.json();
-        if (!res.ok || !payload.ok) throw new Error(payload.error || "Failed to load wallets");
+        if (!res.ok || !payload.ok) {
+          throw new Error(payload.error || "Failed to load wallets");
+        }
         setWallets(payload.wallets);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error loading wallets");
@@ -43,99 +42,91 @@ export function TokenCard({ result, scanRunId, rank }: { result: TokenResult; sc
         setLoading(false);
       }
     }
+
     setOpen((prev) => !prev);
   }
 
-  const formatUsd = (val: number) =>
-    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: val > 1_000_000 ? 0 : 2 }).format(val);
-  
-  const pctString = `${(result.controlPct * 100).toFixed(1)}%`;
+  const formatUsd = (value: number) =>
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: value >= 1_000_000 ? 0 : 2
+    }).format(value);
+
+  const controlPct = Math.max(0, Math.min(100, result.controlPct * 100));
 
   return (
-    <div className="glass-panel p-5 flex flex-col gap-4 text-sm hover:border-white/20 transition-colors">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex gap-4 items-center">
-          <div className="flex items-center justify-center h-10 w-10 rounded-full bg-white/5 border border-white/10 font-mono text-xs text-emerald-400">
-            #{rank}
-          </div>
-          <div>
-            <h3 className="font-bold text-lg text-white leading-none mb-1.5 flex items-center gap-2">
-              {result.symbol || "Unnamed"}
-            </h3>
-            <p className="text-zinc-400 text-xs">{result.name || "Unknown Token"}</p>
-          </div>
+    <article className="result-card glass-panel flex flex-col gap-4 p-4">
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.15em] text-zinc-500">Rank #{rank}</p>
+          <h3 className="mt-1 text-base font-semibold text-white">{result.symbol || "Unnamed token"}</h3>
+          <p className="text-xs text-zinc-500">{result.name || result.mint}</p>
         </div>
         <AddressCopier address={result.ca} />
-      </div>
+      </header>
 
-      <div className="grid grid-cols-2 gap-y-4 gap-x-6 mt-2">
+      <div className="grid grid-cols-2 gap-3 text-sm">
         <div>
-          <span className="text-xs text-zinc-500 uppercase tracking-widest font-semibold flex items-center gap-1.5 mb-1.5">
-            <Coins className="h-3 w-3" /> Market Cap
-          </span>
-          <span className="font-mono text-zinc-200">{formatUsd(result.marketCapUsd)}</span>
+          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Market cap</p>
+          <p className="mt-1 font-mono text-zinc-200">{formatUsd(result.marketCapUsd)}</p>
         </div>
         <div>
-          <span className="text-xs text-zinc-500 uppercase tracking-widest font-semibold flex items-center gap-1.5 mb-1.5">
-            <Wallet className="h-3 w-3" /> Group Value
-          </span>
-          <span className="font-mono text-zinc-200 text-emerald-400">{formatUsd(result.totalUsdHeld)}</span>
+          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Group value</p>
+          <p className="mt-1 font-mono text-emerald-300">{formatUsd(result.totalUsdHeld)}</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Control</p>
+          <p className="mt-1 font-mono text-zinc-200">{controlPct.toFixed(1)}%</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Score</p>
+          <p className="mt-1 font-mono text-zinc-200">{result.score.toFixed(3)}</p>
         </div>
       </div>
 
-      <div className="mt-2 text-xs">
-        <div className="flex justify-between mb-1.5">
-          <span className="text-zinc-500 uppercase tracking-widest font-semibold flex items-center gap-1.5">
-            <AlertCircle className="h-3 w-3" /> Top Holder Control
-          </span>
-          <span className="font-mono text-emerald-400">{pctString}</span>
+      <div>
+        <div className="mb-1 flex items-center justify-between text-xs text-zinc-500">
+          <span>Holder control bar</span>
+          <span>{controlPct.toFixed(1)}%</span>
         </div>
-        <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-          <div className="h-full bg-emerald-500 rounded-full" style={{ width: Math.min(result.controlPct * 100, 100) + "%" }} />
+        <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
+          <div className="h-full rounded-full bg-emerald-500" style={{ width: `${controlPct}%` }} />
         </div>
       </div>
 
-      <div className="pt-4 border-t border-white/5 mt-2">
+      <div className="border-t border-white/10 pt-3">
         <button
+          type="button"
           onClick={toggleOverlap}
-          className="w-full flex justify-between items-center text-xs uppercase tracking-widest font-semibold text-zinc-400 py-1 hover:text-white transition-colors"
+          className="flex w-full items-center justify-between rounded-md px-1 py-1 text-xs uppercase tracking-[0.15em] text-zinc-400 hover:text-zinc-200"
         >
-          <span className="flex items-center gap-1.5">
-            <Users className="h-3.5 w-3.5" />
-            Shared Wallets ({result.overlapHolderCount})
-          </span>
+          <span>Shared wallets ({result.overlapHolderCount})</span>
           {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
 
-        <AnimatePresence>
-          {open && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="overflow-hidden"
-            >
-              <div className="pt-3 pb-1">
-                {loading && <p className="text-zinc-500 animate-pulse text-center py-2">Loading wallets...</p>}
-                {error && <p className="text-red-400 text-center py-2">{error}</p>}
-                {wallets && wallets.length > 0 && (
-                  <ul className="max-h-[200px] overflow-y-auto pr-1 space-y-1.5">
-                    {wallets.map((w) => (
-                      <li key={w.address} className="flex justify-between items-center py-1.5 px-2 rounded-md hover:bg-white/5">
-                        <AddressCopier address={w.address} showFullOnHover className="bg-transparent border-transparent px-1 py-0.5 hover:bg-white/10" />
-                        <span className="font-mono text-zinc-400">{formatUsd(w.usdValue)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {wallets && wallets.length === 0 && (
-                  <p className="text-zinc-500 text-center py-2">No matching deterministic wallets.</p>
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {open && (
+          <div className="mt-2 space-y-2">
+            {loading ? <p className="text-xs text-zinc-500">Loading wallets…</p> : null}
+            {error ? <p className="text-xs text-red-300">{error}</p> : null}
+            {wallets?.length ? (
+              <ul className="max-h-48 space-y-1 overflow-y-auto pr-1">
+                {wallets.map((wallet) => (
+                  <li key={wallet.address} className="flex items-center justify-between rounded-md bg-white/5 px-2 py-1.5">
+                    <AddressCopier
+                      address={wallet.address}
+                      showFullOnHover
+                      className="border-transparent bg-transparent px-0 text-[11px]"
+                    />
+                    <span className="font-mono text-xs text-zinc-400">{formatUsd(wallet.usdValue)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {wallets && wallets.length === 0 ? <p className="text-xs text-zinc-500">No overlap wallets found.</p> : null}
+          </div>
+        )}
       </div>
-    </div>
+    </article>
   );
 }

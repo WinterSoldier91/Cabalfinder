@@ -1,13 +1,7 @@
 import type { Metadata } from "next";
-import { Anton, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import type { ReactNode } from "react";
 import "./globals.css";
-
-const displayFont = Anton({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: "400"
-});
 
 const bodyFont = IBM_Plex_Sans({
   variable: "--font-body",
@@ -22,14 +16,14 @@ const monoFont = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Cabalfinder // Helius Signal Desk",
-  description: "Helius-native Solana holder intelligence dashboard for active scans, wallet-cluster analysis, and future agent workflows."
+  title: "Cabalfinder",
+  description: "Solana holder overlap intelligence for fast scan-based token discovery."
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${displayFont.variable} ${bodyFont.variable} ${monoFont.variable}`}>{children}</body>
+      <body className={`${bodyFont.variable} ${monoFont.variable}`}>{children}</body>
     </html>
   );
 }

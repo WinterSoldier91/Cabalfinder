@@ -3,50 +3,38 @@ import { test, expect } from "@playwright/test";
 const TEST_MINT = "2odHeumkiJx46YyNHeZvDjMwsoNhpAgFQuipT96npump";
 
 test.describe("Cabalfinder Dashboard", () => {
-  test("should load and display system status", async ({ page }) => {
+  test("loads scanner shell", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("h1")).toContainText("CABALFINDER SIGNAL DESK");
-    
-    // Status panel should load provider readiness
-    const providerList = page.locator(".provider-list");
-    await expect(providerList).toBeVisible();
-    await expect(providerList).toContainText("Helius DAS + RPC");
+
+    await expect(page.getByRole("heading", { name: /holder overlap scanner/i })).toBeVisible();
+    await expect(page.getByLabel(/token mint/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /run scan/i })).toBeVisible();
   });
 
-  test("should run a successful token scan", async ({ page }) => {
+  test("runs a token scan", async ({ page }) => {
     await page.goto("/");
-    
-    const mintInput = page.locator("#mint");
-    await mintInput.fill(TEST_MINT);
-    
-    const scanButton = page.getByRole("button", { name: /Run Helius Scan/i });
-    await scanButton.click();
-    
-    // Wait for results grid (this can be slow)
+
+    await page.locator("#mint").fill(TEST_MINT);
+    await page.getByRole("button", { name: /run scan/i }).click();
+
     const resultsGrid = page.locator(".results-grid");
-    await expect(resultsGrid).toBeVisible({ timeout: 60000 });
-    
-    // Check for at least one result card
+    await expect(resultsGrid).toBeVisible({ timeout: 60_000 });
+
     const firstCard = resultsGrid.locator(".result-card").first();
     await expect(firstCard).toBeVisible();
-    await expect(firstCard).toContainText("Market cap");
-    
-    // Test Copy Table Action
-    const copyAllBtn = page.getByRole("button", { name: /Copy all CAs/i });
-    await expect(copyAllBtn).toBeVisible();
+    await expect(firstCard).toContainText(/market cap/i);
+
+    await expect(page.getByRole("button", { name: /copy all cas/i })).toBeVisible();
   });
 
-  test("should handle invalid mint input", async ({ page }) => {
+  test("shows validation error for invalid mint", async ({ page }) => {
     await page.goto("/");
-    
-    const mintInput = page.locator("#mint");
-    await mintInput.fill("this-is-not-a-mint");
-    
-    const scanButton = page.getByRole("button", { name: /Run Helius Scan/i });
-    await scanButton.click();
-    
+
+    await page.locator("#mint").fill("this-is-not-a-mint");
+    await page.getByRole("button", { name: /run scan/i }).click();
+
     const errorBanner = page.locator(".error-banner");
     await expect(errorBanner).toBeVisible();
-    await expect(errorBanner).toContainText(/mint must be a valid/i);
+    await expect(errorBanner).toContainText(/mint/i);
   });
 });

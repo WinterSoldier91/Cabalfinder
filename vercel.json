@@ -1,33 +1,33 @@
 {
   "version": 2,
-
   "installCommand": "npm install",
   "buildCommand": "npm run build --workspace=@cabalfinder/shared && npm run build --workspace=@cabalfinder/web",
   "outputDirectory": "apps/web/.next",
   "framework": "nextjs",
-
   "functions": {
-    "apps/api/src/vercel.ts": {
+    "api/*.ts": {
       "maxDuration": 60,
       "memory": 1024
     }
   },
-
   "rewrites": [
     {
       "source": "/healthz",
-      "destination": "/apps/api/src/vercel"
+      "destination": "/api/healthz"
+    },
+    {
+      "source": "/v1",
+      "destination": "/api/v1"
     },
     {
       "source": "/v1/:path*",
-      "destination": "/apps/api/src/vercel"
+      "destination": "/api/v1?path=:path*"
     }
   ],
-
   "crons": [
     {
       "path": "/v1/cron/monitor",
-      "schedule": "*/10 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
